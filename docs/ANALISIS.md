@@ -107,7 +107,7 @@ batas waktu kalender.
 
 ## 4. Patch (yang diterapkan repo ini)
 
-Di `a/z.smali` (hasil baksmali dari `classes.dex`):
+Di smali hasil baksmali dari `classes.dex`:
 
 1. **Gerbang dimatikan** — pada blok uji `am.b()[4]`:
 
@@ -132,7 +132,33 @@ Di `a/z.smali` (hasil baksmali dari `classes.dex`):
    Kunci baru terdekripsi menjadi `" "` (spasi), jadi banner EXPIRED
    tidak pernah dirender sekalipun handler terpanggil oleh error lain.
 
-Skrip otomatisnya: `patch/apply_patch.py`.
+3. **Tombol lock band diaktifkan paksa** (`a/am.smali`, `onPrepareOptionsMenu`;
+   ditambahkan pada rilis v1.1 setelah uji perangkat: banner bersih tetapi
+   tombolnya masih abu-abu). Ikon centang bar atas adalah item menu 0,
+   `menu_rbp_config` "RAT/Band Preferences", yang hanya diaktifkan bila:
+
+   ```java
+   menu.getItem(0).setEnabled(
+       (f319b.get(3) == 0 || f324b[4] == 0) ? false : true);
+   ```
+
+   Syarat `f324b[4] != 0` adalah kondisi yang sama dengan gerbang expired,
+   jadi tombolnya ikut terkunci. Patch memotong perhitungan boolean-nya:
+
+   ```diff
+        invoke-interface {p1, v4}, Landroid/view/Menu;->getItem(I)Landroid/view/MenuItem;
+        move-result-object v0
+   +    # PATCH-NOEXPIRE-3: selalu aktif
+   +    const/4 v6, 0x1
+   +    goto :goto_3f
+        iget-object v6, p0, La/am;->b:Landroid/util/SparseIntArray;
+        ... (perhitungan lama menjadi kode mati) ...
+        :goto_3f
+        invoke-interface {v0, v6}, Landroid/view/MenuItem;->setEnabled(Z)Landroid/view/MenuItem;
+   ```
+
+Skrip otomatisnya: `patch/apply_patch.py` (kini menerima dua berkas:
+`a/z.smali` dan `a/am.smali`).
 
 ## 5. Reproduksi patch (build dari nol)
 
@@ -145,7 +171,7 @@ CP=$(ls smali-jars/*.jar | tr '\n' ':')
 java -cp "$CP" org.jf.baksmali.Main disassemble classes.dex -o smali
 
 # 2) patch
-python3 patch/apply_patch.py smali/a/z.smali
+python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali
 
 # 3) rakit
 java -cp "$CP" org.jf.smali.Main assemble smali -o classes_patched.dex

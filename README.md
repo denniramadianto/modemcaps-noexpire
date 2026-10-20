@@ -57,16 +57,23 @@ Ringkasnya:
 
 ## Patch yang diterapkan
 
-Dua perubahan smali di `a/z.smali` (lihat `patch/`):
+Tiga perubahan smali (lihat `patch/`):
 
 1. **Gerbang expired dimatikan** — lompatan bersyarat menuju blok `throw`
-   "Build expired" diganti lompatan tanpa syarat ke jalur lanjut inisialisasi.
-   Blok `throw`-nya sendiri menjadi kode mati. Inisialisasi kini selalu
-   berjalan tuntas.
+   "Build expired" di `a/z.smali` diganti lompatan tanpa syarat ke jalur
+   lanjut inisialisasi. Blok `throw`-nya sendiri menjadi kode mati.
+   Inisialisasi kini selalu berjalan tuntas.
 2. **Banner tidak bisa tampil lagi (jaring pengaman)** — kunci string
-   banner EXPIRED (`0xFFFF5A6E9A601210`) di handler diganti kunci string
+   banner EXPIRED (`0xFFFF5A6E9A601210`) di `a/z.smali` diganti kunci string
    spasi, sehingga sekalipun handler exception terpanggil karena error lain,
    yang disisipkan ke header hanyalah spasi.
+3. **Tombol Band Preferences selalu aktif (sejak v1.1)** — ikon centang di
+   bar atas adalah menu item 0, **"RAT/Band Preferences"** (`menu_rbp_config`),
+   pintu masuk fitur lock band. Di `onPrepareOptionsMenu` (`a/am.smali`)
+   item ini hanya diaktifkan bila `f319b.get(3) != 0 && f324b[4] != 0` —
+   kondisi yang sama dengan gerbang expired — sehingga di perangkat yang
+   kena status expired tombolnya ikut abu-abu walau banner sudah bersih.
+   Patch melewati gerbang itu dan memaksa item selalu `enabled`.
 
 APK hasil patch dibangun ulang dari DEX yang dirakit dari smali terpatch,
 di-zipalign, lalu ditandatangani ulang (skema v1+v2+v3 terverifikasi).
@@ -81,7 +88,7 @@ Prasyarat: JDK 17, Android SDK build-tools 34 (aapt2 tidak wajib), `smali`/
 java -cp "<classpath-smali>" org.jf.baksmali.Main disassemble classes.dex -o smali
 
 # 2. Terapkan patch
-python3 patch/apply_patch.py smali/a/z.smali
+python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali
 
 # 3. Rakit DEX baru
 java -cp "<classpath-smali>" org.jf.smali.Main assemble smali -o classes_patched.dex
