@@ -1,0 +1,32 @@
+# Diff smali mentah (referensi manual) — terhadap a/z.smali hasil
+# baksmali 2.5.2 dari classes.dex build 2402-1. Setara dengan yang
+# dilakukan patch/apply_patch.py.
+#
+# --- Patch 1: gerbang expired (offset instruksi ±0xE464) ---
+# Konteks: setelah aget-wide elemen [4] dari am.b()[J dan cmp-long vs 0.
+#
+#      cmp-long v2, v4, v6
+#
+# -    if-eqz v2, :cond_e46d
+# +    # PATCH-NOEXPIRE-1: expiry gate disabled - never throw the coded
+# +    # "Build expired" IllegalArgumentException, always continue init.
+# +    goto :goto_e47c
+#
+#      goto :goto_e47c
+#
+#      :cond_e46d            <- menjadi kode mati (tidak ada lompatan ke sini)
+#      new-instance v1, Ljava/lang/IllegalArgumentException;
+#      const-wide v4, -0xa555659fedf0L        ; terdekripsi: 'x__x__d'
+#      ...
+#      throw v1
+#
+# --- Patch 2: banner di handler catch-all (offset instruksi ±0xE5BF) ---
+#
+# -    const-wide v8, -0xa591659fedf0L
+# +    # PATCH-NOEXPIRE-2: banner key now decodes to a single space, so the
+# +    # handler in a.z can never render the "EXPIRED" banner into the header.
+# +    const-wide v8, -0xd996381edde0L
+#
+#      invoke-static {v8, v9}, La/c;->a(J)Ljava/lang/String;
+#      ; kunci lama -> '❌EXPIRED.⏹ SOME FEATURES DISABLED '
+#      ; kunci baru -> ' ' (spasi)

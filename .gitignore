@@ -1,0 +1,8 @@
+# Build artifacts & secrets — APK dirilis lewat GitHub Releases, bukan repo
+*.apk
+*.keystore
+*.dex
+unsigned.apk
+aligned.apk
+smali/
+work/
