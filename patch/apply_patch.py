@@ -16,10 +16,21 @@ Menerapkan 2 perubahan pada file smali hasil baksmali `a/z.smali`:
      atas) selalu aktif — gerbang `SparseIntArray.get(3) != 0 &&
      am.b()[4] != 0` di `onPrepareOptionsMenu` dilewati.
 
+  4. Daftar band tidak lagi kosong — mask kapabilitas RAT (extra "b")
+     di layar Band Preferences (`a/em`) hanya pernah terisi bit
+     NSA/NR oleh parser DIAG build ini, sehingga grup GSM/UMTS/LTE
+     tidak pernah terbentuk di modem era LTE. Bit grup GSM(2)/UMTS(3)/
+     LTE(4) disuntikkan saat layar membaca extra tersebut; isi grup
+     tetap dari tabel band asli modem (extra d..L).
+
+  5. Anti force-close — runnable auto-expand di `a/em` tidak lagi
+     memanggil `expandGroup(0)` bila adapter kosong
+     (sebelumnya: IndexOutOfBoundsException di `a.bg.getChildrenCount`).
+
 Idempoten: aman dijalankan dua kali (patch yang sudah ada dilewati).
 
 Pakai:
-    python3 apply_patch.py <path-ke-a/z.smali> <path-ke-a/am.smali>
+    python3 apply_patch.py <path-ke-a/z.smali> <path-ke-a/am.smali> <path-ke-a/em.smali>
 """
 import sys
 
@@ -64,7 +75,7 @@ def patch_z(path: str) -> int:
     changed = False
 
     if "PATCH-NOEXPIRE-1" in src:
-        print("[1/3] gerbang expired: sudah terpatch, lewati")
+        print("[1/5] gerbang expired: sudah terpatch, lewati")
     else:
         ctx = PATCH1_CTX + "\n" + PATCH1_OLD
         if ctx not in src:
@@ -73,10 +84,10 @@ def patch_z(path: str) -> int:
             return -1
         src = src.replace(ctx, PATCH1_CTX + "\n" + PATCH1_NEW, 1)
         changed = True
-        print("[1/3] gerbang expired: DIPATCH")
+        print("[1/5] gerbang expired: DIPATCH")
 
     if "PATCH-NOEXPIRE-2" in src:
-        print("[2/3] banner handler: sudah terpatch, lewati")
+        print("[2/5] banner handler: sudah terpatch, lewati")
     else:
         if src.count(PATCH2_OLD) != 1:
             print("[2/3] GAGAL: kunci banner EXPIRED tidak ditemukan "
@@ -84,7 +95,7 @@ def patch_z(path: str) -> int:
             return -1
         src = src.replace(PATCH2_OLD, PATCH2_NEW, 1)
         changed = True
-        print("[2/3] banner handler: DIPATCH")
+        print("[2/5] banner handler: DIPATCH")
 
     if changed:
         with open(path, "w", encoding="utf-8") as fh:
@@ -97,21 +108,126 @@ def patch_am(path: str) -> int:
     with open(path, encoding="utf-8") as fh:
         src = fh.read()
     if "PATCH-NOEXPIRE-3" in src:
-        print("[3/3] menu Band Preferences: sudah terpatch, lewati")
+        print("[3/5] menu Band Preferences: sudah terpatch, lewati")
         return 0
     if src.count(PATCH3_CTX) != 1:
-        print("[3/3] GAGAL: konteks enable item 0 tidak ditemukan tepat 1x "
+        print("[3/5] GAGAL: konteks enable item 0 tidak ditemukan tepat 1x "
               "(build tidak cocok?)")
         return -1
     src = src.replace(PATCH3_CTX, PATCH3_CTX + PATCH3_NEW, 1)
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(src)
-    print("[3/3] menu Band Preferences: DIPATCH")
+    print("[3/5] menu Band Preferences: DIPATCH")
     return 0
 
 
+def patch_em(path: str) -> int:
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read()
+    changed = False
+
+    # --- Patch 4 -----------------------------------------------------------
+    if "PATCH-NOEXPIRE-4" in src:
+        print("[4/5] mask RAT Band Preferences: sudah terpatch, lewati")
+    else:
+        ctx = (
+            "    iput-object v0, p0, La/em;->a:[J\n"
+            "\n"
+            "    invoke-virtual {p0}, La/em;->getIntent()Landroid/content/Intent;\n"
+        )
+        new = (
+            "    iput-object v0, p0, La/em;->a:[J\n"
+            "\n"
+            + PATCH4_BODY +
+            "    invoke-virtual {p0}, La/em;->getIntent()Landroid/content/Intent;\n"
+        )
+        if src.count(ctx) != 1:
+            print("[4/5] GAGAL: konteks extra \"b\" di em tidak ditemukan tepat 1x")
+            return -1
+        src = src.replace(ctx, new, 1)
+        changed = True
+        print("[4/5] mask RAT Band Preferences: DIPATCH")
+
+    # --- Patch 5 -----------------------------------------------------------
+    if "PATCH-NOEXPIRE-5" in src:
+        print("[5/5] pengaman expandGroup: sudah terpatch, lewati")
+    else:
+        ctx = (
+            "    check-cast p0, La/el;\n"
+            "\n"
+            "    if-eqz p0, :cond_b\n"
+            "\n"
+            "    const/4 v0, 0x0\n"
+        )
+        new = (
+            "    check-cast p0, La/el;\n"
+            "\n"
+            "    if-eqz p0, :cond_b\n"
+            "\n"
+            + PATCH5_BODY +
+            "    const/4 v0, 0x0\n"
+        )
+        if src.count(ctx) != 1:
+            print("[5/5] GAGAL: konteks expandGroup di em tidak ditemukan tepat 1x")
+            return -1
+        src = src.replace(ctx, new, 1)
+        changed = True
+        print("[5/5] pengaman expandGroup: DIPATCH")
+
+    if changed:
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(src)
+    return 0
+
+
+PATCH4_BODY = """    # PATCH-NOEXPIRE-4: the RAT-capability mask in extra "b" only ever gets
+    # NSA/NR bits from this build's DIAG parsers, so the Band Preferences
+    # screen builds zero groups (and used to crash) on LTE-era modems.
+    # Force the GSM(2)/UMTS(3)/LTE(4) group bits the phone's radios support;
+    # group contents still come from the real modem band tables (extras d..L).
+    if-eqz v0, :patch4_done
+
+    array-length v1, v0
+
+    const/4 v2, 0x0
+
+    :patch4_loop
+    if-ge v2, v1, :patch4_done
+
+    aget-wide v3, v0, v2
+
+    const-wide/16 v5, 0x1c
+
+    or-long/2addr v3, v5
+
+    aput-wide v3, v0, v2
+
+    add-int/lit8 v2, v2, 0x1
+
+    goto :patch4_loop
+
+    :patch4_done
+"""
+
+PATCH5_BODY = """    # PATCH-NOEXPIRE-5: never expand group 0 of an empty adapter
+    # (was: IndexOutOfBoundsException in a.dr.get -> force close).
+    invoke-virtual {p0}, Landroid/widget/ExpandableListView;->getExpandableAdapter()Landroid/widget/ExpandableListAdapter;
+
+    move-result-object v0
+
+    if-eqz v0, :cond_b
+
+    invoke-interface {v0}, Landroid/widget/ExpandableListAdapter;->getGroupCount()I
+
+    move-result v0
+
+    if-lez v0, :cond_b
+
+"""
+
+
 def main() -> int:
-    if len(sys.argv) != 3:
+    if len(sys.argv) != 4:
         print(__doc__)
         return 2
     z_rc = patch_z(sys.argv[1])
@@ -119,7 +235,9 @@ def main() -> int:
         return 1
     if patch_am(sys.argv[2]) != 0:
         return 1
-    print("OK — patch selesai" if z_rc == 0 else "OK — tidak ada perubahan")
+    if patch_em(sys.argv[3]) != 0:
+        return 1
+    print("OK — patch selesai")
     return 0
 
 

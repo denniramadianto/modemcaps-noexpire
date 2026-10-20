@@ -157,8 +157,50 @@ Di smali hasil baksmali dari `classes.dex`:
         invoke-interface {v0, v6}, Landroid/view/MenuItem;->setEnabled(Z)Landroid/view/MenuItem;
    ```
 
-Skrip otomatisnya: `patch/apply_patch.py` (kini menerima dua berkas:
-`a/z.smali` dan `a/am.smali`).
+Skrip otomatisnya: `patch/apply_patch.py` (kini menerima tiga berkas:
+`a/z.smali`, `a/am.smali`, dan `a/em.smali`).
+
+### 4.1 Lanjutan (v1.2): layar Band Preferences kosong & force close
+
+Uji perangkat v1.1: tombol Band Preferences bisa diklik dan layar
+`a.em` terbuka (header SIM tampil), tetapi daftar grup band kosong
+lalu aplikasi force close. Stack trace dari logcat:
+
+```
+java.lang.IndexOutOfBoundsException: 0.
+    at a.dr.get
+    at a.bg.getChildrenCount
+    at android.widget.ExpandableListConnector.refreshExpGroupMetadataList
+    at android.widget.ExpandableListConnector.expandGroup
+    at a.em.a
+```
+
+Analisis: `a.em` membangun grup dari bit mask kapabilitas RAT
+(`f495a`, dari extra intent `"b"` = `am.f310a`): bit 2=GSM, 3=UMTS,
+4=LTE, 16=CDMA2000, 19=NSA, 20=NR, 21=NR-NTN, 22=NR+NR. Di seluruh
+kode build ini, satu-satunya penulis bit mask tersebut adalah handler
+respons DIAG tipe 40/43/45/47 — dan ketiganya hanya menyetel bit
+19/20/22 (NSA/NR). Di modem era LTE (mis. SDX9) respons itu tidak
+menghasilkan bit apa pun, mask tetap 0, grup tidak terbentuk, dan
+runnable auto-expand terjadwal (`postDelayed` ±1 dtk) menabrak daftar
+kosong.
+
+Perbaikan (patch 4 & 5 di `a/em.smali`):
+- Setelah `f495a = getIntent().getLongArrayExtra("b")`, OR-kan
+  konstanta `0x1C` (bit 2|3|4) ke tiap elemen — grup GSM/UMTS/LTE
+  selalu dibentuk; isinya (daftar band + status centang saat ini)
+  tetap dibaca dari tabel band asli modem pada extra `d..L` dan
+  extra `"C"`/`"D"`, jadi tidak ada data yang dipalsukan.
+- Runnable `em.a(fp)` memeriksa `getExpandableAdapter().getGroupCount() > 0`
+  sebelum `expandGroup(0, true)` — crash tidak mungkin terulang
+  sekalipun grup kosong.
+
+Catatan alur layar: tombol ✗ (bar atas) = batal (result 0), ikon
+tong sampah = minta hapus preferensi (result 21 — induk menulis
+penghapusan ke modem; **ini menghapus konfigurasi band SIM dan bisa
+membuat SIM kehilangan layanan sampai preferensi ditulis ulang**),
+dan **tombol BACK Android = terapkan** (`bd.onBackPressed` →
+`setResult(em.a(), intent)`).
 
 ## 5. Reproduksi patch (build dari nol)
 
@@ -171,7 +213,7 @@ CP=$(ls smali-jars/*.jar | tr '\n' ':')
 java -cp "$CP" org.jf.baksmali.Main disassemble classes.dex -o smali
 
 # 2) patch
-python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali
+python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali smali/a/em.smali
 
 # 3) rakit
 java -cp "$CP" org.jf.smali.Main assemble smali -o classes_patched.dex

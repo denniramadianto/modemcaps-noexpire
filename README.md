@@ -74,6 +74,16 @@ Tiga perubahan smali (lihat `patch/`):
    kondisi yang sama dengan gerbang expired — sehingga di perangkat yang
    kena status expired tombolnya ikut abu-abu walau banner sudah bersih.
    Patch melewati gerbang itu dan memaksa item selalu `enabled`.
+4. **Daftar band terisi + anti force-close (sejak v1.2)** — layar Band
+   Preferences (`a/em`) membangun grup (GSM/UMTS/LTE/…) dari bit mask
+   kapabilitas RAT (extra intent `"b"`). Di build ini parser DIAG hanya
+   pernah mengisi bit NSA/NR mask tersebut, sehingga di modem era LTE
+   grupnya kosong total — lalu runnable auto-expand memanggil
+   `expandGroup(0)` dan aplikasi **force close**
+   (`IndexOutOfBoundsException` di `a.bg.getChildrenCount`). Patch:
+   (a) suntik bit grup GSM(2)/UMTS(3)/LTE(4) ke mask saat layar membaca
+   extra `"b"` — isi grup tetap dari tabel band asli modem (extra `d..L`);
+   (b) runnable expand kini memeriksa `getGroupCount() > 0` dulu.
 
 APK hasil patch dibangun ulang dari DEX yang dirakit dari smali terpatch,
 di-zipalign, lalu ditandatangani ulang (skema v1+v2+v3 terverifikasi).
@@ -88,7 +98,7 @@ Prasyarat: JDK 17, Android SDK build-tools 34 (aapt2 tidak wajib), `smali`/
 java -cp "<classpath-smali>" org.jf.baksmali.Main disassemble classes.dex -o smali
 
 # 2. Terapkan patch
-python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali
+python3 patch/apply_patch.py smali/a/z.smali smali/a/am.smali smali/a/em.smali
 
 # 3. Rakit DEX baru
 java -cp "<classpath-smali>" org.jf.smali.Main assemble smali -o classes_patched.dex
