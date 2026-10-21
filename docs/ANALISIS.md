@@ -191,9 +191,14 @@ Perbaikan (patch 4 & 5 di `a/em.smali`):
   selalu dibentuk; isinya (daftar band + status centang saat ini)
   tetap dibaca dari tabel band asli modem pada extra `d..L` dan
   extra `"C"`/`"D"`, jadi tidak ada data yang dipalsukan.
-- Runnable `em.a(fp)` memeriksa `getExpandableAdapter().getGroupCount() > 0`
+- Runnable `em.a(fp)` memeriksa `getExpandableListAdapter().getGroupCount() > 0`
   sebelum `expandGroup(0, true)` — crash tidak mungkin terulang
   sekalipun grup kosong.
+
+> Koreksi v1.3: rilis v1.2 sempat memanggil nama method yang salah
+> (`getExpandableAdapter()` — tidak ada di framework) sehingga runnable
+> yang sama justru melempar `NoSuchMethodError`. Nama yang benar:
+> `getExpandableListAdapter()`.
 
 Catatan alur layar: tombol ✗ (bar atas) = batal (result 0), ikon
 tong sampah = minta hapus preferensi (result 21 — induk menulis
