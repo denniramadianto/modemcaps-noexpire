@@ -244,3 +244,29 @@ ZIP utuh, SHA-256 DEX di dalam APK identik dengan DEX terpatch
 - Tetap butuh root (jalur DIAG/QRTR + `supolicy`), sama seperti aslinya.
 - Patch bersifat bedah minimal (2 instruksi): perilaku aplikasi di luar
   gerbang expired tidak diubah sama sekali.
+
+## 10. Patch 6 — Updater dalam aplikasi (rilis v1.4)
+
+Permintaan pengguna: tombol update + riwayat versi + rollback + hapus
+APK unduhan, tanpa membuka GitHub lagi. Karena base-nya aplikasi
+tertutup ter-obfuskasi, updater diwujudkan sebagai kode baru yang
+hidup berdampingan, bukan menulis ulang logika aplikasi:
+
+- **Kode baru**: `upd.Updater` (Java polos, hanya API framework) —
+  dikompilasi `javac` + `d8` menjadi `classes2.dex`. Menampilkan
+  dialog: daftar rilis dari GitHub API repo ini (tag, tanggal, catatan,
+  status terpasang/terunduh via perbandingan SHA-256 asset dengan
+  APK yang sedang terpasang), unduh dengan progress, pasang via
+  `su -c "pm install -r -d"` (root; `-d` mengizinkan rollback,
+  `-r` mempertahankan data), dan hapus file unduhan dari
+  `getExternalFilesDir()/apks`.
+- **Kait smali** (Patch 6 di `a/am.smali`): `addMenuItem()` dari
+  `onCreateOptionsMenu`; `handleItem()` dicegat di awal
+  `onOptionsItemSelected` memakai `invoke-static/range` — wajib,
+  karena method itu `.registers 39` (register parameter > v15;
+  bentuk kurung biasa gagal assemble).
+- **Manifest**: disisipkan `<uses-permission INTERNET>` dengan editor
+  AXML khusus (`updater/add_internet_permission.py`): append string
+  ke pool (indeks lama tetap valid karena offset relatif terhadap
+  `stringsStart`) + sisip elemen sebelum `<uses-sdk>`; terverifikasi
+  via `aapt2 dump xmltree/badging`.

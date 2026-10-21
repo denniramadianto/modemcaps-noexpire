@@ -27,6 +27,16 @@ Menerapkan 2 perubahan pada file smali hasil baksmali `a/z.smali`:
      memanggil `expandGroup(0)` bila adapter kosong
      (sebelumnya: IndexOutOfBoundsException di `a.bg.getChildrenCount`).
 
+  6. Updater dalam aplikasi (v1.4) — dua kait kecil di `a/am` menuju
+     class `upd.Updater` yang tinggal di `classes2.dex` (sumber di
+     folder `updater/` repo ini): item "Cek Update & Riwayat Versi"
+     ditambahkan ke menu utama, dan kliknya dicegat di awal
+     `onOptionsItemSelected`. Updater membaca rilis GitHub repo ini,
+     mengunduh APK rilis ke folder aplikasi, memasang versi mana pun
+     (termasuk rollback) via root `pm install -r -d`, dan menghapus
+     file unduhan. Manifest biner turut diberi izin INTERNET
+     (lihat `updater/add_internet_permission.py`).
+
 Idempoten: aman dijalankan dua kali (patch yang sudah ada dilewati).
 
 Pakai:
@@ -118,6 +128,62 @@ def patch_am(path: str) -> int:
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(src)
     print("[3/5] menu Band Preferences: DIPATCH")
+    return 0
+
+
+
+
+# --- Patch 6: updater hooks (v1.4) -----------------------------------------
+P6A_CTX = (
+    "    :cond_2a\n"
+    "    invoke-super {p0, p1}, Landroid/app/Activity;->onCreateOptionsMenu(Landroid/view/Menu;)Z\n"
+)
+P6A_NEW = (
+    "    :cond_2a\n"
+    "    invoke-static {p0, p1}, Lupd/Updater;->addMenuItem(Landroid/app/Activity;Landroid/view/Menu;)V\n"
+    "\n"
+    "    invoke-super {p0, p1}, Landroid/app/Activity;->onCreateOptionsMenu(Landroid/view/Menu;)Z\n"
+)
+P6B_CTX = (
+    ".method public final onOptionsItemSelected(Landroid/view/MenuItem;)Z\n"
+    "    .registers 39\n"
+    "\n"
+    "    move-object/from16 v0, p0\n"
+)
+P6B_NEW = (
+    ".method public final onOptionsItemSelected(Landroid/view/MenuItem;)Z\n"
+    "    .registers 39\n"
+    "\n"
+    "    invoke-static/range {p0 .. p1}, Lupd/Updater;->handleItem(Landroid/app/Activity;Landroid/view/MenuItem;)Z\n"
+    "\n"
+    "    move-result v0\n"
+    "\n"
+    "    if-eqz v0, :upd_cont\n"
+    "\n"
+    "    const/4 v0, 0x1\n"
+    "\n"
+    "    return v0\n"
+    "\n"
+    "    :upd_cont\n"
+    "    move-object/from16 v0, p0\n"
+)
+
+
+def patch_updater(path: str) -> int:
+    """Patch 6 on a/am.smali (updater menu hooks)."""
+    with open(path, encoding="utf-8") as fh:
+        src = fh.read()
+    if "Lupd/Updater;->addMenuItem" in src and "Lupd/Updater;->handleItem" in src:
+        print("[6/6] kait updater di menu: sudah terpatch, lewati")
+        return 0
+    if src.count(P6A_CTX) != 1 or src.count(P6B_CTX) != 1:
+        print("[6/6] GAGAL: konteks kait updater tidak ditemukan tepat 1x "
+              "(build tidak cocok?)")
+        return -1
+    src = src.replace(P6A_CTX, P6A_NEW, 1).replace(P6B_CTX, P6B_NEW, 1)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(src)
+    print("[6/6] kait updater di menu: DIPATCH")
     return 0
 
 
@@ -236,6 +302,8 @@ def main() -> int:
     if patch_am(sys.argv[2]) != 0:
         return 1
     if patch_em(sys.argv[3]) != 0:
+        return 1
+    if patch_updater(sys.argv[2]) != 0:
         return 1
     print("OK — patch selesai")
     return 0
