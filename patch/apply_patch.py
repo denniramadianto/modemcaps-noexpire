@@ -211,7 +211,7 @@ PATCH4_BODY = """    # PATCH-NOEXPIRE-4: the RAT-capability mask in extra "b" on
 
 PATCH5_BODY = """    # PATCH-NOEXPIRE-5: never expand group 0 of an empty adapter
     # (was: IndexOutOfBoundsException in a.dr.get -> force close).
-    invoke-virtual {p0}, Landroid/widget/ExpandableListView;->getExpandableAdapter()Landroid/widget/ExpandableListAdapter;
+    invoke-virtual {p0}, Landroid/widget/ExpandableListView;->getExpandableListAdapter()Landroid/widget/ExpandableListAdapter;
 
     move-result-object v0
 
